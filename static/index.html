@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 眼神空间定位</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#0f172a; color:#e2e8f0; min-height:100vh; }
+.header { text-align:center; padding:30px 20px 10px; }
+.header h1 { font-size:28px; background:linear-gradient(135deg,#60a5fa,#a78bfa); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.header p { color:#94a3b8; margin-top:8px; font-size:14px; }
+.container { max-width:900px; margin:0 auto; padding:20px; }
+.tabs { display:flex; gap:10px; margin-bottom:20px; }
+.tab { flex:1; padding:14px; text-align:center; background:#1e293b; border:2px solid #334155; border-radius:12px; cursor:pointer; font-size:16px; transition:all .2s; }
+.tab:hover { border-color:#60a5fa; }
+.tab.active { border-color:#60a5fa; background:#1e3a5f; }
+.panel { display:none; }
+.panel.active { display:block; }
+.upload-area { border:2px dashed #475569; border-radius:16px; padding:60px 20px; text-align:center; cursor:pointer; transition:all .2s; background:#1e293b; }
+.upload-area:hover, .upload-area.dragover { border-color:#60a5fa; background:#1e3a5f; }
+.upload-area input { display:none; }
+.upload-area .icon { font-size:48px; margin-bottom:12px; }
+.upload-area p { color:#94a3b8; }
+.btn { display:inline-block; padding:12px 32px; border:none; border-radius:10px; font-size:16px; cursor:pointer; transition:all .2s; margin-top:16px; }
+.btn-primary { background:linear-gradient(135deg,#3b82f6,#8b5cf6); color:#fff; }
+.btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 20px rgba(59,130,246,.4); }
+.btn-primary:disabled { opacity:.5; cursor:not-allowed; transform:none; box-shadow:none; }
+.preview { margin-top:20px; text-align:center; }
+.preview img { max-width:100%; max-height:400px; border-radius:12px; border:2px solid #334155; }
+.result { margin-top:20px; background:#1e293b; border-radius:12px; padding:20px; display:none; }
+.result h3 { color:#60a5fa; margin-bottom:12px; }
+.result-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.result-item { background:#0f172a; padding:12px; border-radius:8px; }
+.result-item .label { color:#94a3b8; font-size:12px; margin-bottom:4px; }
+.result-item .value { font-size:18px; font-weight:600; color:#e2e8f0; }
+.loading { display:none; margin-top:20px; text-align:center; }
+.loading.show { display:block; }
+.spinner { display:inline-block; width:30px; height:30px; border:3px solid #334155; border-top-color:#60a5fa; border-radius:50%; animation:spin 1s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.gaze-dot { position:absolute; width:16px; height:16px; background:#ef4444; border-radius:50%; transform:translate(-50%,-50%); box-shadow:0 0 20px rgba(239,68,68,.6); pointer-events:none; display:none; }
+</style>
+</head>
+<body>
+<div class="header">
+<h1>AI 眼神空间定位</h1>
+<p>上传图片或拍照，AI 分析眼神方向和头部姿态</p>
+</div>
+<div class="container">
+<div class="tabs">
+<div class="tab active" onclick="switchTab(0)">上传图片</div>
+<div class="tab" onclick="switchTab(1)">拍照识别</div>
+</div>
+
+<div class="panel active" id="panelUpload">
+<div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+<div class="icon">📷</div>
+<p>点击选择图片 或 拖拽图片到这里</p>
+<p style="font-size:12px;margin-top:8px;color:#64748b">支持 JPG / PNG / BMP</p>
+<input type="file" id="fileInput" accept="image/*">
+</div>
+</div>
+
+<div class="panel" id="panelCamera">
+<div style="text-align:center">
+<video id="video" autoplay playsinline style="max-width:100%;border-radius:12px;border:2px solid #334155;display:none"></video>
+<canvas id="canvas" style="display:none"></canvas>
+<button class="btn btn-primary" id="btnStartCam" onclick="startCamera()">打开摄像头</button>
+<button class="btn btn-primary" id="btnCapture" onclick="captureAndSend()" style="display:none">拍照识别</button>
+</div>
+</div>
+
+<div class="preview" id="preview"></div>
+<div class="loading" id="loading"><div class="spinner"></div><p style="margin-top:10px;color:#94a3b8">AI 分析中...</p></div>
+<div class="result" id="result"></div>
+</div>
+
+<script>
+const API = window.location.origin + '/api/gaze/image';
+
+function switchTab(i) {
+document.querySelectorAll('.tab').forEach((t,j) => t.classList.toggle('active', j===i));
+document.querySelectorAll('.panel').forEach((p,j) => p.classList.toggle('active', j===i));
+}
+
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+
+function handleFile(file) {
+if (!file) return;
+const reader = new FileReader();
+reader.onload = e => {
+document.getElementById('preview').innerHTML = '<img id="previewImg" src="' + e.target.result + '">';
+sendImage(e.target.result);
+};
+reader.readAsDataURL(file);
+}
+
+async function sendImage(base64) {
+document.getElementById('loading').classList.add('show');
+document.getElementById('result').style.display = 'none';
+try {
+const res = await fetch(API, {
+method: 'POST',
+headers: {'Content-Type': 'application/json'},
+body: JSON.stringify({image_base64: base64})
+});
+const data = await res.json();
+showResult(data, base64);
+} catch(e) {
+document.getElementById('result').style.display = 'block';
+document.getElementById('result').innerHTML = '<h3>错误</h3><p>' + e.message + '</p>';
+} finally {
+document.getElementById('loading').classList.remove('show');
+}
+}
+
+function showResult(data, base64) {
+const r = document.getElementById('result');
+if (data.status === 'no_face') {
+r.style.display = 'block';
+r.innerHTML = '<h3>未检测到人脸</h3><p>请上传包含清晰人脸的图片</p>';
+return;
+}
+const g = data.gaze, h = data.head_pose, s = data.screen_point;
+r.style.display = 'block';
+r.innerHTML = '<h3>识别结果</h3>' +
+'<div class="result-grid">' +
+'<div class="result-item"><div class="label">视线 X</div><div class="value">' + (s.x*100).toFixed(1) + '%</div></div>' +
+'<div class="result-item"><div class="label">视线 Y</div><div class="value">' + (s.y*100).toFixed(1) + '%</div></div>' +
+'<div class="result-item"><div class="label">头部 pitch</div><div class="value">' + h.pitch.toFixed(1) + '°</div></div>' +
+'<div class="result-item"><div class="label">头部 yaw</div><div class="value">' + h.yaw.toFixed(1) + '°</div></div>' +
+'<div class="result-item"><div class="label">头部 roll</div><div class="value">' + h.roll.toFixed(1) + '°</div></div>' +
+'<div class="result-item"><div class="label">深度 Z</div><div class="value">' + g.z.toFixed(3) + '</div></div>' +
+'</div>';
+}
+
+let stream = null;
+async function startCamera() {
+try {
+stream = await navigator.mediaDevices.getUserMedia({video: {facingMode:'user'}});
+const v = document.getElementById('video');
+v.srcObject = stream;
+v.style.display = 'block';
+document.getElementById('btnStartCam').style.display = 'none';
+document.getElementById('btnCapture').style.display = 'inline-block';
+} catch(e) { alert('无法打开摄像头: ' + e.message); }
+}
+
+function captureAndSend() {
+const v = document.getElementById('video');
+const c = document.getElementById('canvas');
+c.width = v.videoWidth; c.height = v.videoHeight;
+c.getContext('2d').drawImage(v, 0, 0);
+const base64 = c.toDataURL('image/jpeg');
+document.getElementById('preview').innerHTML = '<img src="' + base64 + '" style="max-width:100%;border-radius:12px;border:2px solid #334155">';
+sendImage(base64);
+}
+</script>
+</body>
+</html>
