@@ -1,0 +1,25 @@
+{
+  "model_type": "custom",
+  "task": "face-landmark-detection",
+  "framework": "MediaPipe",
+  "license": "Apache-2.0",
+  "language": [
+    "en"
+  ],
+  "tags": [
+    "computer-vision",
+    "face-detection",
+    "gaze-tracking",
+    "mediapipe",
+    "fastapi"
+  ],
+  "library_name": "mediapipe",
+  "pipeline_tag": "face-landmark-detection",
+  "model_name": "GazeService",
+  "description": "AI Gaze Spatial Localization Service based on MediaPipe FaceLandmarker + FastAPI",
+  "files": {
+    "face_landmarker.task": "MediaPipe FaceLandmarker model (478 landmarks + iris)",
+    "main.py": "FastAPI server with gaze tracking and head pose estimation",
+    "static/index.html": "Web frontend for testing"
+  }
+}
