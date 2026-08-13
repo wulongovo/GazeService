@@ -41,8 +41,11 @@
 ### 安装运行
 
 ```bash
-# 克隆项目
+# 克隆项目（二选一）
+# GitHub（国际）：
 git clone https://github.com/wulongovo/GazeService.git
+# Gitee（国内加速）：
+git clone https://gitee.com/wulongovo/multimodal-vision-project.git GazeService
 cd GazeService
 
 # 创建虚拟环境
